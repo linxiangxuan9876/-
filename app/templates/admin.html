@@ -766,30 +766,33 @@
             }
 
             const action = status === 'published' ? '通过' : '拒绝';
-            showModal('确认批量操作', `确定要${action}选中的 ${ids.length} 条记录吗？`, async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/admin/review_qa_batch?status=${status}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(ids)
-                    });
+            // 直接执行，不再弹窗确认
+            executeBatchReview(status, ids);
+        }
 
-                    if (response.ok) {
-                        alert('批量操作成功！');
-                        selectedIds.clear();
-                        loadReviewData();
-                        loadStats();
-                    } else {
-                        alert('操作失败');
-                    }
-                } catch (err) {
-                    alert('网络错误');
+        async function executeBatchReview(status, ids) {
+            const action = status === 'published' ? '通过' : '拒绝';
+            try {
+                const response = await fetch(`${API_BASE}/admin/review_qa_batch?status=${status}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(ids)
+                });
+
+                if (response.ok) {
+                    // 不再弹窗，直接刷新
+                    selectedIds.clear();
+                    loadReviewData();
+                    loadStats();
+                } else {
+                    alert('操作失败');
                 }
-                closeModal();
-            });
+            } catch (err) {
+                alert('网络错误');
+            }
         }
 
         function batchDelete() {

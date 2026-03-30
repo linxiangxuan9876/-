@@ -118,14 +118,14 @@ async def upload_qa_batch(
         results = await asyncio.gather(*tasks)
 
         success_items = []
-        failed_count = 0
+        skipped_count = 0
 
         for db_qa in results:
             if db_qa is not None:
                 db.add(db_qa)
                 success_items.append(db_qa)
             else:
-                failed_count += 1
+                skipped_count += 1
 
         db.commit()
 
@@ -134,7 +134,8 @@ async def upload_qa_batch(
 
         return BatchQAResponse(
             success_count=len(success_items),
-            failed_count=failed_count,
+            failed_count=0,
+            skipped_count=skipped_count,
             total_count=len(df),
             items=success_items
         )

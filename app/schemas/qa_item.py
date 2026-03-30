@@ -28,5 +28,6 @@ class QAItemUpdate(BaseModel):
 class BatchQAResponse(BaseModel):
     success_count: int
     failed_count: int
+    skipped_count: int = 0
     total_count: int
     items: list[QAItemResponse]

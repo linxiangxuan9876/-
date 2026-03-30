@@ -444,7 +444,14 @@
                 const data = await response.json();
                 if (response.ok) {
                     resultDiv.className = 'result success';
-                    resultDiv.innerHTML = `✅ 导入成功！<br>成功：${data.success_count} 条<br>失败：${data.failed_count} 条`;
+                    let message = `✅ 导入成功！<br>成功：${data.success_count} 条`;
+                    if (data.skipped_count > 0) {
+                        message += `<br>跳过（示例数据）：${data.skipped_count} 条`;
+                    }
+                    if (data.failed_count > 0) {
+                        message += `<br>失败：${data.failed_count} 条`;
+                    }
+                    resultDiv.innerHTML = message;
                     fileInput.value = '';
                     document.getElementById('fileName').textContent = '';
                 } else {
