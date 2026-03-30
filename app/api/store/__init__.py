@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.core import get_db, create_access_token, verify_password, get_current_store_user
 from app.core.config import settings
-from app.models import User, Document, QA_Item, QAStatus, DocStatus
+from app.models import User, Document, QA_Item, QAStatus, DocStatus, DocumentQA
 from app.schemas import QAItemCreate, QAItemResponse, BatchQAResponse
 
 router = APIRouter(prefix="/store", tags=["门店端接口"])
@@ -155,9 +155,24 @@ async def upload_document(
     current_user: User = Depends(get_current_store_user),
     db: Session = Depends(get_db)
 ):
+    """
+    上传任意格式文档（PDF、Word、TXT、Excel等）
+    上传后自动触发解析
+    """
+    from app.services.document_parser import DocumentParser
+
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
-    file_ext = os.path.splitext(file.filename)[1]
+    file_ext = os.path.splitext(file.filename)[1].lower()
+
+    # 检查文件格式
+    supported_exts = DocumentParser.SUPPORTED_EXTENSIONS | {'.xlsx', '.xls'}
+    if file_ext not in supported_exts:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式: {file_ext}。支持的格式: {', '.join(supported_exts)}"
+        )
+
     unique_filename = f"{uuid.uuid4().hex}{file_ext}"
     file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
 
@@ -175,6 +190,7 @@ async def upload_document(
             original_filename=file.filename,
             file_path=file_path,
             file_size=file_size,
+            file_type=file_ext,
             car_model=car_model,
             category=category,
             status=DocStatus.pending
@@ -184,20 +200,106 @@ async def upload_document(
         db.commit()
         db.refresh(db_doc)
 
+        # 如果是Excel文件，保持原有处理逻辑
+        if file_ext in ['.xlsx', '.xls']:
+            return {
+                "id": db_doc.id,
+                "filename": unique_filename,
+                "original_filename": file.filename,
+                "car_model": car_model,
+                "category": category,
+                "status": db_doc.status.value,
+                "file_type": "excel",
+                "message": "Excel文件上传成功，请使用批量导入接口处理"
+            }
+
+        # 其他格式文档，自动触发解析
+        # 更新状态为解析中
+        db_doc.status = DocStatus.parsing
+        db.commit()
+
+        # 后台解析
+        asyncio.create_task(_auto_parse_document(db_doc.id, db))
+
         return {
             "id": db_doc.id,
             "filename": unique_filename,
             "original_filename": file.filename,
             "car_model": car_model,
             "category": category,
-            "status": db_doc.status.value,
-            "message": "文件上传成功"
+            "status": "parsing",
+            "file_type": file_ext,
+            "message": "文档上传成功，正在自动解析中"
         }
 
     except Exception as e:
         if os.path.exists(file_path):
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+
+
+async def _auto_parse_document(doc_id: int, db: Session):
+    """自动解析文档（后台任务）"""
+    from app.services.document_parser import DocumentParser, DocumentQAExtractor
+    from app.services.auto_classify import auto_classify
+    import asyncio
+
+    try:
+        # 重新获取数据库会话
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+
+        doc = db.query(Document).filter(Document.id == doc_id).first()
+        if not doc:
+            db.close()
+            return
+
+        # 解析文档
+        parse_result = DocumentParser.parse(doc.file_path)
+
+        if not parse_result["success"]:
+            doc.status = DocStatus.rejected
+            doc.parse_error = parse_result["error"]
+            db.commit()
+            db.close()
+            return
+
+        # 保存解析结果
+        doc.parsed_content = parse_result["content"]
+        doc.parsed_metadata = parse_result["metadata"]
+        doc.status = DocStatus.parsed
+
+        # 提取Q&A
+        qa_pairs = DocumentQAExtractor.extract_qa_pairs(parse_result["text_blocks"])
+
+        # 保存提取的Q&A并自动分类
+        for qa in qa_pairs:
+            classification = await auto_classify(qa["question"])
+
+            doc_qa = DocumentQA(
+                document_id=doc_id,
+                store_id=doc.store_id,
+                question=qa["question"],
+                answer=qa["answer"],
+                main_category=classification["main_category"],
+                sub_category=classification["sub_category"],
+                status=DocStatus.pending,
+                is_merged=0
+            )
+            db.add(doc_qa)
+
+        db.commit()
+        db.close()
+
+    except Exception as e:
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        doc = db.query(Document).filter(Document.id == doc_id).first()
+        if doc:
+            doc.status = DocStatus.rejected
+            doc.parse_error = str(e)
+            db.commit()
+        db.close()
 
 @router.get("/my_docs")
 async def get_my_docs(
