@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
@@ -102,6 +102,74 @@ async def store_page():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.get("/debug/users")
+async def list_users():
+    """调试接口：列出所有用户"""
+    db = SessionLocal()
+    try:
+        users = db.query(User).all()
+        return {
+            "count": len(users),
+            "users": [{"id": u.id, "username": u.username, "role": u.role.value} for u in users]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        db.close()
+
+@app.get("/debug/create-test-users")
+async def create_test_users():
+    """调试接口：创建测试用户"""
+    db = SessionLocal()
+    result = []
+    try:
+        # 创建管理员
+        admin = db.query(User).filter(User.username == "admin").first()
+        if not admin:
+            admin = User(
+                username="admin",
+                hashed_password=get_password_hash("admin123"),
+                store_id="HQ001",
+                store_name="总部",
+                role=UserRole.admin
+            )
+            db.add(admin)
+            result.append("创建 admin 用户成功")
+        
+        # 创建门店用户
+        store = db.query(User).filter(User.username == "store1").first()
+        if not store:
+            store = User(
+                username="store1",
+                hashed_password=get_password_hash("store123"),
+                store_id="STORE001",
+                store_name="北京朝阳区门店",
+                role=UserRole.store
+            )
+            db.add(store)
+            result.append("创建 store1 用户成功")
+        
+        db.commit()
+        
+        if not result:
+            result.append("用户已存在，无需创建")
+            
+        return {"status": "success", "message": result}
+    except Exception as e:
+        db.rollback()
+        return {"status": "error", "message": str(e)}
+    finally:
+        db.close()
+
+@app.get("/debug/config")
+async def show_config():
+    """调试接口：显示配置信息"""
+    return {
+        "database_url": settings.DATABASE_URL,
+        "upload_dir": settings.UPLOAD_DIR,
+        "qa_upload_dir": settings.QA_UPLOAD_DIR
+    }
 
 if __name__ == "__main__":
     import uvicorn
