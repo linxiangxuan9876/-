@@ -6,14 +6,54 @@ from contextlib import asynccontextmanager
 import os
 
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, SessionLocal
+from app.core.security import get_password_hash
+from app.models import User, UserRole
 from app.api import store_router, admin_router, auth_router
+
+def init_default_users():
+    """初始化默认用户账号"""
+    db = SessionLocal()
+    try:
+        # 创建管理员账号
+        existing_admin = db.query(User).filter(User.username == "admin").first()
+        if not existing_admin:
+            admin = User(
+                username="admin",
+                hashed_password=get_password_hash("admin123"),
+                store_id="HQ001",
+                store_name="总部",
+                role=UserRole.admin
+            )
+            db.add(admin)
+            print("✅ 创建管理员账号: admin / admin123")
+
+        # 创建门店账号
+        existing_store = db.query(User).filter(User.username == "store1").first()
+        if not existing_store:
+            store_user = User(
+                username="store1",
+                hashed_password=get_password_hash("store123"),
+                store_id="STORE001",
+                store_name="北京朝阳区门店",
+                role=UserRole.store
+            )
+            db.add(store_user)
+            print("✅ 创建门店账号: store1 / store123")
+
+        db.commit()
+    except Exception as e:
+        print(f"初始化用户失败: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.QA_UPLOAD_DIR, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    init_default_users()  # 初始化默认用户
     yield
 
 app = FastAPI(
