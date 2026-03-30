@@ -90,31 +90,24 @@ def keyword_match(question: str) -> Optional[Dict[str, str]]:
 
 async def auto_classify(question: str) -> Dict[str, str]:
     """
-    智能分类：关键词匹配 + LLM双重验证
-    1. 先用关键词匹配获取候选分类
-    2. 再用LLM验证并优化分类结果
+    智能分类：优先使用LLM分类，关键词作为兜底
+    1. 先用LLM进行分类
+    2. LLM失败时回退到关键词匹配
     """
     categories_str = extract_categories_from_prompt(KB_CATEGORIES)
-
-    # 第一步：关键词匹配获取候选分类（作为LLM的参考）
-    keyword_result = keyword_match(question)
-    keyword_hint = ""
-    if keyword_result:
-        keyword_hint = f"\n关键词匹配提示：该问题可能属于【{keyword_result['main_category']}-{keyword_result['sub_category']}】，请验证并优化。"
 
     prompt = f"""分析以下汽车4S店的客户问题，将其归入最合适的大类和小类中。
 
 参考分类体系：
 {categories_str}
-{keyword_hint}
 
 客户问题：{question}
 
 分析要求：
 1. 仔细阅读问题，理解客户真实意图
-2. 如果提供了关键词匹配提示，请验证该分类是否准确，必要时进行修正
-3. 例如"有没有免费午餐"属于门店服务设施相关，应归入"门店服务与活动-营业时间与设施"
-4. "保养套餐多少钱"才应归入"维修与保养-保养套餐与项目"
+2. 例如"有没有免费午餐"属于门店服务设施相关，应归入"门店服务与活动-营业时间与设施"
+3. "保养套餐多少钱"才应归入"维修与保养-保养套餐与项目"
+4. 只能从提供的分类体系中选择，不要创建新分类
 5. 如果无法匹配任何分类，则归入'其他综合问答-其他问题'
 
 请严格返回以下JSON格式（不要包含任何其他内容）：
@@ -136,6 +129,7 @@ async def auto_classify(question: str) -> Dict[str, str]:
                     return {"main_category": main_key, "sub_category": sub_cat}
 
         # 如果LLM返回无效，回退到关键词匹配结果
+        keyword_result = keyword_match(question)
         if keyword_result:
             return keyword_result
 
@@ -147,6 +141,7 @@ async def auto_classify(question: str) -> Dict[str, str]:
         return {"main_category": "其他综合问答", "sub_category": "其他问题"}
 
     except json.JSONDecodeError:
+        keyword_result = keyword_match(question)
         if keyword_result:
             return keyword_result
         best_main, best_sub, best_score = find_best_match(question, KB_CATEGORIES)
@@ -154,6 +149,7 @@ async def auto_classify(question: str) -> Dict[str, str]:
             return {"main_category": best_main, "sub_category": best_sub}
         return {"main_category": "其他综合问答", "sub_category": "其他问题"}
     except Exception:
+        keyword_result = keyword_match(question)
         if keyword_result:
             return keyword_result
         best_main, best_sub, best_score = find_best_match(question, KB_CATEGORIES)

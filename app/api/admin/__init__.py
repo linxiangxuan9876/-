@@ -5,9 +5,15 @@ from typing import Optional, List
 from datetime import datetime
 import os
 import io
+from pydantic import BaseModel
 
 from app.core import get_db, get_current_admin
 from app.models import User, Document, QA_Item, QAStatus
+
+
+class CategoryUpdate(BaseModel):
+    main_category: str
+    sub_category: str
 
 try:
     import pandas as pd
@@ -175,6 +181,36 @@ async def get_categories(
     from app.services.kb_categories import KB_CATEGORIES
     return {
         "categories": KB_CATEGORIES
+    }
+
+
+@router.put("/update_category/{qa_id}")
+async def update_category(
+    qa_id: int,
+    category_update: CategoryUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """仅更新Q&A的分类，不改变审核状态"""
+    qa_item = db.query(QA_Item).filter(QA_Item.id == qa_id).first()
+
+    if not qa_item:
+        raise HTTPException(status_code=404, detail="Q&A不存在")
+
+    from app.services.kb_categories import KB_CATEGORIES
+    if category_update.main_category not in KB_CATEGORIES or category_update.sub_category not in KB_CATEGORIES[category_update.main_category]:
+        raise HTTPException(status_code=400, detail="无效的分类")
+
+    qa_item.main_category = category_update.main_category
+    qa_item.sub_category = category_update.sub_category
+
+    db.commit()
+
+    return {
+        "message": "分类更新成功",
+        "qa_id": qa_id,
+        "main_category": qa_item.main_category,
+        "sub_category": qa_item.sub_category
     }
 
 @router.put("/review_qa_batch")
