@@ -11,10 +11,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    DATABASE_URL: str = "sqlite:///./knowledge_base.db"
+    # 数据库路径 - 优先使用环境变量，否则使用本地路径
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./knowledge_base.db")
 
-    UPLOAD_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "docs")
-    QA_UPLOAD_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "qa")
+    # 上传目录 - 使用环境变量或默认路径
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "docs"))
+    QA_UPLOAD_DIR: str = os.getenv("QA_UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "qa"))
 
     OPENAI_API_KEY: Optional[str] = "sk-ajyewwhwzachwalfelzyzjjupiqcjtmjvrzsjjqknyljlrfv"
     OPENAI_MODEL: str = "gpt-3.5-turbo"
