@@ -15,7 +15,7 @@ def init_default_users():
     """初始化默认用户账号"""
     db = SessionLocal()
     try:
-        # 创建管理员账号
+        # 创建管理员账号 - 密码不超过72字节
         existing_admin = db.query(User).filter(User.username == "admin").first()
         if not existing_admin:
             admin = User(
@@ -44,6 +44,8 @@ def init_default_users():
         db.commit()
     except Exception as e:
         print(f"初始化用户失败: {e}")
+        import traceback
+        traceback.print_exc()
         db.rollback()
     finally:
         db.close()
@@ -158,7 +160,8 @@ async def create_test_users():
         return {"status": "success", "message": result}
     except Exception as e:
         db.rollback()
-        return {"status": "error", "message": str(e)}
+        import traceback
+        return {"status": "error", "message": str(e), "traceback": traceback.format_exc()}
     finally:
         db.close()
 
