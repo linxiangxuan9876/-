@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: store-knowledge-base
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        value: sqlite:///./knowledge_base.db
+      - key: SECRET_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        value: sk-ajyewwhwzachwalfelzyzjjupiqcjtmjvrzsjjqknyljlrfv
+      - key: OPENAI_MODEL
+        value: gpt-3.5-turbo
+      - key: OPENAI_BASE_URL
+        value: https://api.siliconflow.cn/v1
+    disk:
+      name: data
+      mountPath: /opt/render/project/src
+      sizeGB: 1
