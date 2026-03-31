@@ -280,6 +280,9 @@
                     <div class="batch-actions">
                         <button class="success" onclick="batchDocReview('approved')">✓ 批量通过</button>
                         <button class="danger" onclick="batchDocReview('rejected')">✗ 批量拒绝</button>
+                        <button class="info" onclick="batchMergeDocQA()">📥 批量合并</button>
+                        <button class="secondary" onclick="exportDocQA()">📤 导出Excel</button>
+                        <button class="danger" onclick="cleanDocQA()">🗑️ 清洗数据</button>
                     </div>
                     <div class="filter-bar">
                         <select id="docReviewStore" onchange="loadDocReviewData()">
@@ -1280,6 +1283,130 @@
                 }
             } catch (err) {
                 console.error('加载门店列表失败', err);
+            }
+        }
+
+        // 批量合并文档Q&A
+        async function batchMergeDocQA() {
+            if (docReviewSelected.size === 0) {
+                alert('请先选择要合并的项');
+                return;
+            }
+
+            if (!confirm(`确定要批量合并选中的 ${docReviewSelected.size} 项到知识库吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/merge_document_qas_batch`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(Array.from(docReviewSelected))
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    alert(data.message);
+                    docReviewSelected.clear();
+                    loadDocReviewData();
+                    loadStats();
+                } else if (response.status === 401) {
+                    alert('认证失败，请重新登录');
+                    logout();
+                } else {
+                    const error = await response.json();
+                    alert('操作失败: ' + (error.detail || '未知错误'));
+                }
+            } catch (err) {
+                alert('网络错误');
+            }
+        }
+
+        // 导出文档Q&A
+        async function exportDocQA() {
+            const status = document.getElementById('docReviewStatus').value;
+            const storeId = document.getElementById('docReviewStore').value;
+
+            let url = `${API_BASE}/admin/export_document_qas`;
+            const params = [];
+            if (status) params.push(`status=${status}`);
+            if (storeId) params.push(`store_id=${encodeURIComponent(storeId)}`);
+            if (params.length > 0) url += '?' + params.join('&');
+
+            try {
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = `document_qas_export_${new Date().toISOString().slice(0,10)}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(downloadUrl);
+                } else if (response.status === 401) {
+                    alert('认证失败，请重新登录');
+                    logout();
+                } else {
+                    alert('导出失败');
+                }
+            } catch (err) {
+                alert('网络错误');
+            }
+        }
+
+        // 清洗文档Q&A数据
+        async function cleanDocQA() {
+            const status = document.getElementById('docReviewStatus').value;
+            const storeId = document.getElementById('docReviewStore').value;
+
+            if (!status && !storeId) {
+                alert('请选择状态或门店作为清洗条件，避免误删所有数据');
+                return;
+            }
+
+            let confirmMsg = '确定要清洗数据吗？';
+            if (status) confirmMsg += `\n状态: ${status}`;
+            if (storeId) confirmMsg += `\n门店: ${storeId}`;
+            confirmMsg += '\n\n此操作不可恢复！';
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            let url = `${API_BASE}/admin/clean_document_qas`;
+            const params = [];
+            if (status) params.push(`status=${status}`);
+            if (storeId) params.push(`store_id=${encodeURIComponent(storeId)}`);
+            if (params.length > 0) url += '?' + params.join('&');
+
+            try {
+                const response = await fetch(url, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    alert(data.message);
+                    loadDocReviewData();
+                    loadStats();
+                } else if (response.status === 401) {
+                    alert('认证失败，请重新登录');
+                    logout();
+                } else {
+                    const error = await response.json();
+                    alert('清洗失败: ' + (error.detail || '未知错误'));
+                }
+            } catch (err) {
+                alert('网络错误');
             }
         }
 

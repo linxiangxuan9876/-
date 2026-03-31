@@ -337,60 +337,84 @@ async def get_stats(
     current_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    # 文档统计
-    total_docs = db.query(Document).count()
-    doc_parsing = db.query(Document).filter(Document.status == DocStatus.parsing).count()
-    doc_parsed = db.query(Document).filter(Document.status == DocStatus.parsed).count()
+    try:
+        # 文档统计
+        total_docs = db.query(Document).count()
+        doc_parsing = db.query(Document).filter(Document.status == DocStatus.parsing).count()
+        doc_parsed = db.query(Document).filter(Document.status == DocStatus.parsed).count()
 
-    # Q&A统计（排除已删除）
-    total_qa = db.query(QA_Item).filter(QA_Item.is_deleted == False).count()
+        # Q&A统计（排除已删除）
+        total_qa = db.query(QA_Item).filter(QA_Item.is_deleted == False).count()
 
-    # 按状态统计Q&A数量（排除已删除）
-    qa_by_status = db.query(
-        QA_Item.status,
-        db.func.count(QA_Item.id).label('count')
-    ).filter(QA_Item.is_deleted == False).group_by(QA_Item.status).all()
+        # 按状态统计Q&A数量（排除已删除）
+        qa_by_status = db.query(
+            QA_Item.status,
+            db.func.count(QA_Item.id).label('count')
+        ).filter(QA_Item.is_deleted == False).group_by(QA_Item.status).all()
 
-    # 回收站数量
-    recycle_bin_count = db.query(QA_Item).filter(QA_Item.is_deleted == True).count()
+        # 回收站数量
+        recycle_bin_count = db.query(QA_Item).filter(QA_Item.is_deleted == True).count()
 
-    # 文档Q&A统计
-    total_doc_qas = db.query(DocumentQA).count()
-    doc_qa_pending = db.query(DocumentQA).filter(DocumentQA.status == DocStatus.pending).count()
-    doc_qa_approved = db.query(DocumentQA).filter(DocumentQA.status == DocStatus.approved).count()
-    doc_qa_merged = db.query(DocumentQA).filter(DocumentQA.is_merged == 1).count()
-
-    docs_by_store = db.query(
-        Document.store_id,
-        db.func.count(Document.id).label('count')
-    ).group_by(Document.store_id).all()
-
-    qa_by_category = db.query(
-        QA_Item.main_category,
-        db.func.count(QA_Item.id).label('count')
-    ).filter(QA_Item.status == QAStatus.published, QA_Item.is_deleted == False).group_by(QA_Item.main_category).all()
-
-    # 构建状态统计字典
-    status_counts = {str(item.status.value): item.count for item in qa_by_status}
-
-    return {
-        "total_documents": total_docs,
-        "doc_parsing_count": doc_parsing,
-        "doc_parsed_count": doc_parsed,
-        "total_qa_items": total_qa,
-        "recycle_bin_count": recycle_bin_count,
-        "qa_by_status": status_counts,
-        "published_count": status_counts.get('published', 0),
-        "pending_count": status_counts.get('pending_review', 0),
-        "rejected_count": status_counts.get('rejected', 0),
-        "documents_by_store": {item.store_id: item.count for item in docs_by_store},
-        "qa_by_category": {item.main_category: item.count for item in qa_by_category},
         # 文档Q&A统计
-        "total_doc_qas": total_doc_qas,
-        "doc_qa_pending": doc_qa_pending,
-        "doc_qa_approved": doc_qa_approved,
-        "doc_qa_merged": doc_qa_merged
-    }
+        total_doc_qas = db.query(DocumentQA).count()
+        doc_qa_pending = db.query(DocumentQA).filter(DocumentQA.status == DocStatus.pending).count()
+        doc_qa_approved = db.query(DocumentQA).filter(DocumentQA.status == DocStatus.approved).count()
+        doc_qa_merged = db.query(DocumentQA).filter(DocumentQA.is_merged == 1).count()
+
+        docs_by_store = db.query(
+            Document.store_id,
+            db.func.count(Document.id).label('count')
+        ).group_by(Document.store_id).all()
+
+        qa_by_category = db.query(
+            QA_Item.main_category,
+            db.func.count(QA_Item.id).label('count')
+        ).filter(QA_Item.status == QAStatus.published, QA_Item.is_deleted == False).group_by(QA_Item.main_category).all()
+
+        # 构建状态统计字典
+        status_counts = {str(item.status.value): item.count for item in qa_by_status}
+
+        return {
+            "total_documents": total_docs,
+            "doc_parsing_count": doc_parsing,
+            "doc_parsed_count": doc_parsed,
+            "total_qa_items": total_qa,
+            "recycle_bin_count": recycle_bin_count,
+            "qa_by_status": status_counts,
+            "published_count": status_counts.get('published', 0),
+            "pending_count": status_counts.get('pending_review', 0),
+            "rejected_count": status_counts.get('rejected', 0),
+            "documents_by_store": {item.store_id: item.count for item in docs_by_store},
+            "qa_by_category": {item.main_category: item.count for item in qa_by_category},
+            # 文档Q&A统计
+            "total_doc_qas": total_doc_qas,
+            "doc_qa_pending": doc_qa_pending,
+            "doc_qa_approved": doc_qa_approved,
+            "doc_qa_merged": doc_qa_merged
+        }
+    except Exception as e:
+        import traceback
+        print(f"Stats API Error: {e}")
+        print(traceback.format_exc())
+        # 返回默认值
+        return {
+            "total_documents": 0,
+            "doc_parsing_count": 0,
+            "doc_parsed_count": 0,
+            "total_qa_items": 0,
+            "recycle_bin_count": 0,
+            "qa_by_status": {},
+            "published_count": 0,
+            "pending_count": 0,
+            "rejected_count": 0,
+            "documents_by_store": {},
+            "qa_by_category": {},
+            "total_doc_qas": 0,
+            "doc_qa_pending": 0,
+            "doc_qa_approved": 0,
+            "doc_qa_merged": 0,
+            "error": str(e)
+        }
 
 @router.get("/export_qa")
 async def export_qa(
@@ -734,4 +758,84 @@ async def merge_document_qas_batch(
         "message": f"批量合并完成，成功 {merged_count} 条",
         "merged_count": merged_count,
         "errors": errors
+    }
+
+
+@router.get("/export_document_qas")
+async def export_document_qas(
+    status: Optional[str] = Query(None, description="按状态过滤: pending, approved, rejected"),
+    store_id: Optional[str] = Query(None, description="按门店过滤"),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """导出文档Q&A为Excel"""
+    if not PANDAS_AVAILABLE:
+        raise HTTPException(status_code=500, detail="导出功能需要pandas库")
+
+    query = db.query(DocumentQA)
+    if status:
+        query = query.filter(DocumentQA.status == status)
+    if store_id:
+        query = query.filter(DocumentQA.store_id == store_id)
+
+    items = query.order_by(DocumentQA.created_at.desc()).all()
+
+    data = []
+    for item in items:
+        data.append({
+            "ID": item.id,
+            "文档ID": item.document_id,
+            "门店ID": item.store_id,
+            "大类": item.main_category or "",
+            "小类": item.sub_category or "",
+            "问题": item.question,
+            "答案": item.answer,
+            "状态": item.status.value,
+            "是否已合并": "是" if item.is_merged else "否",
+            "创建时间": item.created_at.strftime("%Y-%m-%d %H:%M:%S") if item.created_at else ""
+        })
+
+    df = pd.DataFrame(data)
+
+    # 创建Excel文件
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='文档Q&A')
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=document_qas_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"}
+    )
+
+
+@router.delete("/clean_document_qas")
+async def clean_document_qas(
+    status: Optional[str] = Query(None, description="删除指定状态的Q&A: pending, approved, rejected"),
+    store_id: Optional[str] = Query(None, description="按门店删除"),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """清洗文档Q&A数据（删除指定条件的数据）"""
+    query = db.query(DocumentQA)
+
+    if status:
+        query = query.filter(DocumentQA.status == status)
+    if store_id:
+        query = query.filter(DocumentQA.store_id == store_id)
+
+    # 获取要删除的数量
+    count = query.count()
+
+    if count == 0:
+        return {"message": "没有符合条件的数据需要删除", "deleted_count": 0}
+
+    # 执行删除
+    query.delete(synchronize_session=False)
+    db.commit()
+
+    return {
+        "message": f"清洗完成，共删除 {count} 条数据",
+        "deleted_count": count
     }
