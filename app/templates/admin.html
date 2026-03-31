@@ -35,8 +35,8 @@
         }
         .stats {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
             margin-bottom: 30px;
         }
         .stat-card {
@@ -240,6 +240,7 @@
 
         <div class="main-tabs">
             <button class="main-tab active" onclick="switchMainTab('review')">📋 审核工作台</button>
+            <button class="main-tab" onclick="switchMainTab('docReview')">📄 文档审核</button>
             <button class="main-tab" onclick="switchMainTab('knowledge')">📚 全量知识库</button>
             <button class="main-tab" onclick="switchMainTab('recycle')">♻️ 回收站</button>
         </div>
@@ -268,6 +269,32 @@
                 </div>
                 <div id="reviewTable"></div>
                 <div class="pagination" id="reviewPagination"></div>
+            </div>
+        </div>
+
+        <!-- 文档审核 -->
+        <div id="docReview" class="main-tab-content">
+            <div class="card">
+                <h2>📄 门店文档审核</h2>
+                <div class="toolbar">
+                    <div class="batch-actions">
+                        <button class="success" onclick="batchDocReview('approved')">✓ 批量通过</button>
+                        <button class="danger" onclick="batchDocReview('rejected')">✗ 批量拒绝</button>
+                    </div>
+                    <div class="filter-bar">
+                        <select id="docReviewStore" onchange="loadDocReviewData()">
+                            <option value="">全部门店</option>
+                        </select>
+                        <select id="docReviewStatus" onchange="loadDocReviewData()">
+                            <option value="pending">待审核</option>
+                            <option value="approved">已通过</option>
+                            <option value="rejected">已拒绝</option>
+                        </select>
+                        <button onclick="loadDocReviewData()">刷新</button>
+                    </div>
+                </div>
+                <div id="docReviewTable"></div>
+                <div class="pagination" id="docReviewPagination"></div>
             </div>
         </div>
 
@@ -588,15 +615,25 @@
 
         function togglePageSelect(type, checked) {
             const checkboxes = document.querySelectorAll(`.${type}-checkbox`);
+            const targetSet = type === 'docReview' ? docReviewSelected : selectedIds;
             checkboxes.forEach(cb => {
                 cb.checked = checked;
                 const id = parseInt(cb.value);
                 if (checked) {
-                    selectedIds.add(id);
+                    targetSet.add(id);
                 } else {
-                    selectedIds.delete(id);
+                    targetSet.delete(id);
                 }
             });
+        }
+
+        function toggleSelect(type, id, checked) {
+            const targetSet = type === 'docReview' ? docReviewSelected : selectedIds;
+            if (checked) {
+                targetSet.add(id);
+            } else {
+                targetSet.delete(id);
+            }
         }
 
         function toggleItemSelect(id) {
@@ -1067,9 +1104,185 @@
             window.location.href = '/';
         }
 
+        // 文档审核相关变量和函数
+        let docReviewPage = 0;
+        let docReviewSelected = new Set();
+
+        async function loadDocReviewData() {
+            const status = document.getElementById('docReviewStatus').value;
+            const storeId = document.getElementById('docReviewStore').value;
+            const tableDiv = document.getElementById('docReviewTable');
+
+            let url = `${API_BASE}/admin/document_qas?status=${status}&skip=${docReviewPage * 20}&limit=20`;
+            if (storeId) url += `&store_id=${encodeURIComponent(storeId)}`;
+
+            try {
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        alert('认证失败，请重新登录');
+                        logout();
+                        return;
+                    }
+                    tableDiv.innerHTML = '<p style="color: red;">加载失败</p>';
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.items && data.items.length > 0) {
+                    let html = `<table>
+                        <tr>
+                            <th class="checkbox-col"><input type="checkbox" id="selectAllDocReviewPage" onchange="togglePageSelect('docReview', this.checked)"></th>
+                            <th>ID</th>
+                            <th>门店</th>
+                            <th>大类</th>
+                            <th>小类</th>
+                            <th>问题</th>
+                            <th>答案</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>`;
+
+                    data.items.forEach(item => {
+                        const isSelected = docReviewSelected.has(item.id);
+                        const statusClass = item.status === 'approved' ? 'badge-published' : item.status === 'rejected' ? 'badge-rejected' : 'badge-pending_review';
+                        const statusText = item.status === 'approved' ? '已通过' : item.status === 'rejected' ? '已拒绝' : '待审核';
+                        html += `<tr>
+                            <td class="checkbox-col"><input type="checkbox" class="docReview-checkbox" value="${item.id}" ${isSelected ? 'checked' : ''} onchange="toggleSelect('docReview', ${item.id}, this.checked)"></td>
+                            <td>${item.id}</td>
+                            <td>${item.store_id}</td>
+                            <td>${item.main_category || '-'}</td>
+                            <td>${item.sub_category || '-'}</td>
+                            <td>${item.question}</td>
+                            <td>${item.answer}</td>
+                            <td><span class="badge ${statusClass}">${statusText}</span></td>
+                            <td>
+                                <button class="success" onclick="reviewDocQA(${item.id}, 'approved')">通过</button>
+                                <button class="danger" onclick="reviewDocQA(${item.id}, 'rejected')">拒绝</button>
+                            </td>
+                        </tr>`;
+                    });
+
+                    html += '</table>';
+                    tableDiv.innerHTML = html;
+
+                    // 更新分页
+                    const totalPages = Math.ceil(data.total / 20);
+                    let paginationHtml = '';
+                    for (let i = 0; i < totalPages; i++) {
+                        paginationHtml += `<button class="${i === docReviewPage ? 'active' : ''}" onclick="goToDocReviewPage(${i})">${i + 1}</button>`;
+                    }
+                    document.getElementById('docReviewPagination').innerHTML = paginationHtml;
+                } else {
+                    tableDiv.innerHTML = '<div class="empty-state">暂无数据</div>';
+                    document.getElementById('docReviewPagination').innerHTML = '';
+                }
+            } catch (err) {
+                console.error('加载文档审核数据失败', err);
+                tableDiv.innerHTML = '<p style="color: red;">网络错误</p>';
+            }
+        }
+
+        function goToDocReviewPage(page) {
+            docReviewPage = page;
+            loadDocReviewData();
+        }
+
+        async function reviewDocQA(qaId, status) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/review_document_qa/${qaId}?status=${status}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    alert(status === 'approved' ? '已通过' : '已拒绝');
+                    loadDocReviewData();
+                    loadStats();
+                } else if (response.status === 401) {
+                    alert('认证失败，请重新登录');
+                    logout();
+                } else {
+                    const error = await response.json();
+                    alert('操作失败: ' + (error.detail || '未知错误'));
+                }
+            } catch (err) {
+                alert('网络错误');
+            }
+        }
+
+        async function batchDocReview(status) {
+            if (docReviewSelected.size === 0) {
+                alert('请先选择要审核的项');
+                return;
+            }
+
+            const action = status === 'approved' ? '通过' : '拒绝';
+            if (!confirm(`确定要批量${action}选中的 ${docReviewSelected.size} 项吗？`)) {
+                return;
+            }
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const id of docReviewSelected) {
+                try {
+                    const response = await fetch(`${API_BASE}/admin/review_document_qa/${id}?status=${status}`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch (err) {
+                    failCount++;
+                }
+            }
+
+            alert(`批量审核完成: 成功 ${successCount} 条, 失败 ${failCount} 条`);
+            docReviewSelected.clear();
+            loadDocReviewData();
+            loadStats();
+        }
+
+        // 加载门店列表
+        async function loadStoreList() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/stats`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const stores = data.documents_by_store || {};
+                    const select = document.getElementById('docReviewStore');
+
+                    // 保留第一个选项
+                    select.innerHTML = '<option value="">全部门店</option>';
+
+                    for (const storeId in stores) {
+                        const option = document.createElement('option');
+                        option.value = storeId;
+                        option.textContent = `${storeId} (${stores[storeId]}个文档)`;
+                        select.appendChild(option);
+                    }
+                }
+            } catch (err) {
+                console.error('加载门店列表失败', err);
+            }
+        }
+
         // 初始化
         loadStats();
         loadReviewData();
+        loadStoreList();
     </script>
 </body>
 </html>
