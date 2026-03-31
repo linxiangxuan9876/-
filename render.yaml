@@ -1,27 +1,20 @@
+# Render 部署配置 - 使用 Aiven PostgreSQL
+# 注意：DATABASE_URL 需要在 Render Dashboard 中设置环境变量
 services:
   - type: web
     name: store-knowledge-base
     runtime: python
+    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
       - key: DATABASE_URL
-        value: sqlite:///opt/render/project/src/data/knowledge_base.db
-      - key: UPLOAD_DIR
-        value: /opt/render/project/src/data/uploads/docs
-      - key: QA_UPLOAD_DIR
-        value: /opt/render/project/src/data/uploads/qa
+        sync: false  # 从 Render Dashboard 环境变量获取，不在代码中暴露
       - key: SECRET_KEY
         generateValue: true
-      - key: OPENAI_API_KEY
-        value: sk-ajyewwhwzachwalfelzyzjjupiqcjtmjvrzsjjqknyljlrfv
-      - key: OPENAI_MODEL
-        value: gpt-3.5-turbo
-      - key: OPENAI_BASE_URL
-        value: https://api.siliconflow.cn/v1
-    disk:
-      name: data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
+      - key: UPLOAD_DIR
+        value: /tmp/uploads/docs
+      - key: QA_UPLOAD_DIR
+        value: /tmp/uploads/qa
+      - key: PYTHON_VERSION
+        value: 3.11.0
