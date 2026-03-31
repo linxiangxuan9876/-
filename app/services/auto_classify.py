@@ -353,10 +353,17 @@ def keyword_match(question: str) -> Optional[Dict[str, str]]:
 
 async def auto_classify(question: str) -> Dict[str, str]:
     """
-    智能分类：优先使用LLM分类，关键词作为兜底
-    1. 先用LLM进行分类
-    2. LLM失败时回退到关键词匹配
+    智能分类：优先使用关键词匹配，关键词不匹配再用LLM
+    1. 先用关键词匹配（更精确可控）
+    2. 关键词不匹配时调用LLM
+    3. LLM失败时回退到模糊匹配
     """
+    # 第一优先级：关键词匹配
+    keyword_result = keyword_match(question)
+    if keyword_result:
+        return keyword_result
+
+    # 第二优先级：LLM分类
     categories_str = extract_categories_from_prompt(KB_CATEGORIES)
 
     prompt = f"""分析以下汽车4S店的客户问题，将其归入最合适的大类和小类中。
@@ -370,8 +377,9 @@ async def auto_classify(question: str) -> Dict[str, str]:
 1. 仔细阅读问题，理解客户真实意图
 2. 例如"有没有免费午餐"属于门店服务设施相关，应归入"门店服务与活动-营业时间与设施"
 3. "保养套餐多少钱"才应归入"维修与保养-保养套餐与项目"
-4. 只能从提供的分类体系中选择，不要创建新分类
-5. 如果无法匹配任何分类，则归入'其他综合问答-其他问题'
+4. "坪山比亚迪开门时间"属于门店营业时间相关，应归入"门店服务与活动-营业时间与设施"
+5. 只能从提供的分类体系中选择，不要创建新分类
+6. 如果无法匹配任何分类，则归入'其他综合问答-其他问题'
 
 请严格返回以下JSON格式（不要包含任何其他内容）：
 {{"main_category": "xx", "sub_category": "xx"}}"""
@@ -391,12 +399,7 @@ async def auto_classify(question: str) -> Dict[str, str]:
                 if sub_cat in sub_list:
                     return {"main_category": main_key, "sub_category": sub_cat}
 
-        # 如果LLM返回无效，回退到关键词匹配结果
-        keyword_result = keyword_match(question)
-        if keyword_result:
-            return keyword_result
-
-        # 最后尝试模糊匹配
+        # LLM返回无效，回退到模糊匹配
         best_main, best_sub, best_score = find_best_match(question, KB_CATEGORIES)
         if best_score > 0.8:
             return {"main_category": best_main, "sub_category": best_sub}
@@ -404,17 +407,11 @@ async def auto_classify(question: str) -> Dict[str, str]:
         return {"main_category": "其他综合问答", "sub_category": "其他问题"}
 
     except json.JSONDecodeError:
-        keyword_result = keyword_match(question)
-        if keyword_result:
-            return keyword_result
         best_main, best_sub, best_score = find_best_match(question, KB_CATEGORIES)
         if best_score > 0.8:
             return {"main_category": best_main, "sub_category": best_sub}
         return {"main_category": "其他综合问答", "sub_category": "其他问题"}
     except Exception:
-        keyword_result = keyword_match(question)
-        if keyword_result:
-            return keyword_result
         best_main, best_sub, best_score = find_best_match(question, KB_CATEGORIES)
         if best_score > 0.8:
             return {"main_category": best_main, "sub_category": best_sub}

@@ -469,8 +469,17 @@
             const fileInput = document.getElementById('docFile');
             const resultDiv = document.getElementById('docResult');
 
+            if (!fileInput.files[0]) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '请先选择文件';
+                return;
+            }
+
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
+
+            resultDiv.className = 'result';
+            resultDiv.textContent = '正在上传...';
 
             try {
                 const response = await fetch(`${API_BASE}/store/upload`, {
@@ -482,15 +491,17 @@
                 const data = await response.json();
                 if (response.ok) {
                     resultDiv.className = 'result success';
-                    resultDiv.textContent = '✅ 文档上传成功！';
+                    resultDiv.innerHTML = `✅ ${data.message}<br>文件: ${data.original_filename}<br>状态: ${data.status}`;
                     document.getElementById('docForm').reset();
+                    // 自动刷新文档列表
+                    setTimeout(() => loadMyDocs(), 1000);
                 } else {
                     resultDiv.className = 'result error';
                     resultDiv.textContent = data.detail || '上传失败';
                 }
             } catch (err) {
                 resultDiv.className = 'result error';
-                resultDiv.textContent = '网络错误';
+                resultDiv.textContent = '网络错误: ' + err.message;
             }
         });
 
@@ -506,14 +517,20 @@
                     let html = '<table><tr><th>文件名</th><th>状态</th><th>上传时间</th></tr>';
                     data.documents.forEach(doc => {
                         const statusMap = {
-                            'pending': '审核中',
+                            'pending': '待审核',
+                            'parsing': '解析中',
+                            'parsed': '已解析',
                             'approved': '已通过',
                             'rejected': '已拒绝'
                         };
                         const statusText = statusMap[doc.status] || doc.status;
+                        const statusClass = doc.status === 'rejected' ? 'rejected' :
+                                          doc.status === 'approved' ? 'approved' :
+                                          doc.status === 'parsed' ? 'approved' :
+                                          'pending';
                         html += `<tr>
                             <td>${doc.original_filename}</td>
-                            <td><span class="badge badge-${doc.status}">${statusText}</span></td>
+                            <td><span class="badge badge-${statusClass}">${statusText}</span></td>
                             <td>${new Date(doc.created_at).toLocaleString()}</td>
                         </tr>`;
                     });
