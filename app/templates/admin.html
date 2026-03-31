@@ -429,6 +429,10 @@
 
                 if (!response.ok) {
                     console.error('Stats API error:', response.status);
+                    if (response.status === 401) {
+                        alert('认证失败，请重新登录');
+                        logout();
+                    }
                     return;
                 }
 
@@ -436,11 +440,11 @@
                 console.log('Stats data:', data);
 
                 // 直接使用API返回的各状态数量
-                document.getElementById('publishedCount').textContent = data.published_count || 0;
-                document.getElementById('pendingCount').textContent = data.pending_count || 0;
-                document.getElementById('rejectedCount').textContent = data.rejected_count || 0;
-                document.getElementById('totalDocs').textContent = data.total_documents || 0;
-                document.getElementById('recycleCount').textContent = data.recycle_bin_count || 0;
+                document.getElementById('publishedCount').textContent = data.published_count !== undefined ? data.published_count : '-';
+                document.getElementById('pendingCount').textContent = data.pending_count !== undefined ? data.pending_count : '-';
+                document.getElementById('rejectedCount').textContent = data.rejected_count !== undefined ? data.rejected_count : '-';
+                document.getElementById('totalDocs').textContent = data.total_documents !== undefined ? data.total_documents : '-';
+                document.getElementById('recycleCount').textContent = data.recycle_bin_count !== undefined ? data.recycle_bin_count : '-';
             } catch (err) {
                 console.error('加载统计失败', err);
             }
@@ -1283,6 +1287,7 @@
         loadStats();
         loadReviewData();
         loadStoreList();
+        loadDocReviewData();
     </script>
 </body>
 </html>

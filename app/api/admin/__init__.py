@@ -558,8 +558,8 @@ async def get_document_qas(
     }
 
 
-@router.get("/all_document_qas")
-async def get_all_document_qas(
+@router.get("/document_qas")
+async def get_document_qas(
     status: Optional[str] = Query(None, description="按状态过滤: pending, approved, rejected"),
     is_merged: Optional[int] = Query(None, description="是否已合并: 0=未合并, 1=已合并"),
     store_id: Optional[str] = Query(None, description="按门店过滤"),
