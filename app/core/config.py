@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
     # 数据库路径 - 优先使用环境变量，否则使用本地路径
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./knowledge_base.db")
+    # 将 postgres:// 转换为 postgresql:// 以兼容 SQLAlchemy
+    _raw_db_url: str = os.getenv("DATABASE_URL", "sqlite:///./knowledge_base.db")
+    DATABASE_URL: str = _raw_db_url.replace("postgres://", "postgresql://", 1) if _raw_db_url.startswith("postgres://") else _raw_db_url
 
     # 上传目录 - 使用环境变量或默认路径
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "docs"))
