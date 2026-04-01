@@ -92,8 +92,35 @@ async def upload_qa_batch(
                 if df is None:
                     raise HTTPException(status_code=400, detail="CSV文件编码无法识别，请使用UTF-8编码")
             else:
-                # 读取Excel文件
-                df = pd.read_excel(temp_path, engine='openpyxl')
+                # 读取Excel文件 - 尝试多种引擎
+                df = None
+                errors = []
+
+                # 尝试 openpyxl 引擎 (用于 .xlsx)
+                try:
+                    df = pd.read_excel(temp_path, engine='openpyxl')
+                except Exception as e1:
+                    errors.append(f"openpyxl: {str(e1)}")
+
+                # 如果失败，尝试 xlrd 引擎 (用于 .xls)
+                if df is None:
+                    try:
+                        df = pd.read_excel(temp_path, engine='xlrd')
+                    except Exception as e2:
+                        errors.append(f"xlrd: {str(e2)}")
+
+                # 如果都失败，尝试不指定引擎
+                if df is None:
+                    try:
+                        df = pd.read_excel(temp_path)
+                    except Exception as e3:
+                        errors.append(f"default: {str(e3)}")
+
+                if df is None:
+                    raise HTTPException(status_code=400, detail=f"无法读取Excel文件，请确保文件格式正确。错误: {'; '.join(errors)}")
+
+        except HTTPException:
+            raise
         except Exception as e:
             error_msg = str(e)
             if "File is not a zip file" in error_msg:

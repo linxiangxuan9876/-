@@ -464,7 +464,43 @@
         }
 
         document.getElementById('excelFile').addEventListener('change', (e) => {
-            document.getElementById('fileName').textContent = e.target.files[0]?.name || '';
+            const file = e.target.files[0];
+            const fileNameEl = document.getElementById('fileName');
+
+            if (!file) {
+                fileNameEl.textContent = '';
+                return;
+            }
+
+            fileNameEl.textContent = file.name;
+
+            // 验证文件类型
+            const allowedExts = ['.xlsx', '.xls', '.csv'];
+            const fileExt = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+
+            if (!allowedExts.includes(fileExt)) {
+                alert('不支持的文件格式。请上传 .xlsx, .xls 或 .csv 格式的文件');
+                e.target.value = '';
+                fileNameEl.textContent = '';
+                return;
+            }
+
+            // 验证文件大小 (最大10MB)
+            const maxSize = 10 * 1024 * 1024;
+            if (file.size > maxSize) {
+                alert('文件大小超过10MB限制，请压缩后上传');
+                e.target.value = '';
+                fileNameEl.textContent = '';
+                return;
+            }
+
+            // 检查文件是否为空
+            if (file.size === 0) {
+                alert('文件为空，请选择有效的文件');
+                e.target.value = '';
+                fileNameEl.textContent = '';
+                return;
+            }
         });
 
         async function uploadBatch() {
