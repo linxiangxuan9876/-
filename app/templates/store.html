@@ -207,6 +207,33 @@
             font-size: 16px;
             margin-top: 20px;
         }
+        /* 加载动画 */
+        .loading {
+            text-align: center;
+            padding: 30px;
+            color: #667eea;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e3e3e3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading p {
+            margin: 0;
+            font-size: 14px;
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -242,11 +269,15 @@
                     <button class="secondary" onclick="downloadTemplate()">下载模板</button>
                 </div>
                 <div class="file-upload" onclick="document.getElementById('excelFile').click()">
-                    <input type="file" id="excelFile" accept=".xlsx,.xls">
-                    <p>📁 点击选择Excel文件</p>
+                    <input type="file" id="excelFile" accept=".xlsx,.xls,.csv">
+                    <p>📁 点击选择Excel文件 (.xlsx, .xls, .csv)</p>
                     <p id="fileName" style="color: #667eea; margin-top: 10px;"></p>
                 </div>
-                <button onclick="uploadBatch()" style="margin-top: 20px; width: 100%;">开始上传</button>
+                <button onclick="uploadBatch()" id="uploadBatchBtn" style="margin-top: 20px; width: 100%;">开始上传</button>
+                <div id="batchLoading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>正在处理文件，请稍候...</p>
+                </div>
                 <div id="batchResult" class="result"></div>
             </div>
         </div>
@@ -408,13 +439,28 @@
             }
         }
 
-        function downloadTemplate() {
-            const csvContent = '\uFEFF问题,答案\n示例问题1,示例答案1\n示例问题2,示例答案2';
+        async function downloadTemplate() {
+            // 创建一个简单的Excel文件
+            const templateData = [
+                ['问题', '答案'],
+                ['示例问题1（请删除此行）', '示例答案1（请删除此行）'],
+                ['示例问题2（请删除此行）', '示例答案2（请删除此行）']
+            ];
+
+            // 使用CSV作为后备方案，但提示用户
+            let csvContent = '\uFEFF';
+            templateData.forEach(row => {
+                csvContent += row.join(',') + '\n';
+            });
+
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = 'QA模板.csv';
             link.click();
+
+            // 提示用户
+            alert('模板已下载为CSV格式\n\n使用方法：\n1. 用Excel打开下载的CSV文件\n2. 删除示例数据行\n3. 填入您的问题和答案\n4. 另存为 .xlsx 格式后上传');
         }
 
         document.getElementById('excelFile').addEventListener('change', (e) => {
@@ -424,12 +470,20 @@
         async function uploadBatch() {
             const fileInput = document.getElementById('excelFile');
             const resultDiv = document.getElementById('batchResult');
+            const loadingDiv = document.getElementById('batchLoading');
+            const uploadBtn = document.getElementById('uploadBatchBtn');
 
             if (!fileInput.files[0]) {
                 resultDiv.className = 'result error';
                 resultDiv.textContent = '请先选择文件';
                 return;
             }
+
+            // 显示加载动画
+            loadingDiv.style.display = 'block';
+            uploadBtn.disabled = true;
+            resultDiv.className = 'result';
+            resultDiv.textContent = '';
 
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
@@ -461,6 +515,10 @@
             } catch (err) {
                 resultDiv.className = 'result error';
                 resultDiv.textContent = '网络错误';
+            } finally {
+                // 隐藏加载动画
+                loadingDiv.style.display = 'none';
+                uploadBtn.disabled = false;
             }
         }
 

@@ -61,8 +61,12 @@ async def upload_qa_batch(
     current_user: User = Depends(get_current_store_user),
     db: Session = Depends(get_db)
 ):
-    if not file.filename.endswith('.xlsx'):
-        raise HTTPException(status_code=400, detail="只支持 .xlsx 格式的Excel文件")
+    # 支持多种格式
+    allowed_extensions = ['.xlsx', '.xls', '.csv']
+    file_ext = os.path.splitext(file.filename.lower())[1]
+
+    if file_ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail=f"只支持 {', '.join(allowed_extensions)} 格式的文件")
 
     temp_path = os.path.join(settings.QA_UPLOAD_DIR, f"temp_{uuid.uuid4().hex}_{file.filename}")
 
@@ -73,7 +77,31 @@ async def upload_qa_batch(
         with open(temp_path, "wb") as f:
             f.write(content)
 
-        df = pd.read_excel(temp_path, engine='openpyxl')
+        # 根据文件类型读取
+        try:
+            if file_ext == '.csv':
+                # 尝试多种编码读取CSV
+                encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb2312', 'latin1']
+                df = None
+                for encoding in encodings:
+                    try:
+                        df = pd.read_csv(temp_path, encoding=encoding)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                if df is None:
+                    raise HTTPException(status_code=400, detail="CSV文件编码无法识别，请使用UTF-8编码")
+            else:
+                # 读取Excel文件
+                df = pd.read_excel(temp_path, engine='openpyxl')
+        except Exception as e:
+            error_msg = str(e)
+            if "File is not a zip file" in error_msg:
+                raise HTTPException(status_code=400, detail="Excel文件格式错误，请确保文件是有效的.xlsx格式，或尝试另存为新文件")
+            elif "No such file or directory" in error_msg:
+                raise HTTPException(status_code=400, detail="无法读取文件，请重试")
+            else:
+                raise HTTPException(status_code=400, detail=f"文件读取失败: {error_msg}")
 
         if '问题' not in df.columns or '答案' not in df.columns:
             raise HTTPException(status_code=400, detail="Excel文件必须包含【问题】和【答案】两列")
