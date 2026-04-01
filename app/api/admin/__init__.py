@@ -352,6 +352,10 @@ async def get_stats(
             db.func.count(QA_Item.id).label('count')
         ).filter(QA_Item.is_deleted == False).group_by(QA_Item.status).all()
 
+        # 调试：打印原始查询结果
+        print(f"[DEBUG] qa_by_status raw: {qa_by_status}")
+        print(f"[DEBUG] total_qa: {total_qa}")
+
         # 回收站数量
         recycle_bin_count = db.query(QA_Item).filter(QA_Item.is_deleted == True).count()
 
@@ -372,9 +376,13 @@ async def get_stats(
         ).filter(QA_Item.status == QAStatus.published, QA_Item.is_deleted == False).group_by(QA_Item.main_category).all()
 
         # 构建状态统计字典
-        status_counts = {str(item.status.value): item.count for item in qa_by_status}
+        status_counts = {}
+        for item in qa_by_status:
+            status_key = str(item.status.value) if hasattr(item.status, 'value') else str(item.status)
+            status_counts[status_key] = item.count
+            print(f"[DEBUG] status: {status_key} = {item.count}")
 
-        return {
+        result = {
             "total_documents": total_docs,
             "doc_parsing_count": doc_parsing,
             "doc_parsed_count": doc_parsed,
@@ -392,6 +400,9 @@ async def get_stats(
             "doc_qa_approved": doc_qa_approved,
             "doc_qa_merged": doc_qa_merged
         }
+
+        print(f"[DEBUG] result: {result}")
+        return result
     except Exception as e:
         import traceback
         print(f"Stats API Error: {e}")
