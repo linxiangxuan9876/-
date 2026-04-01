@@ -78,11 +78,14 @@ async def upload_qa_batch(
             f.write(content)
 
         # 根据文件类型读取
+        df = None
+        errors = []
+
+        # 首先尝试按照文件扩展名读取
         try:
             if file_ext == '.csv':
                 # 尝试多种编码读取CSV
                 encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb2312', 'latin1']
-                df = None
                 for encoding in encodings:
                     try:
                         df = pd.read_csv(temp_path, encoding=encoding)
@@ -90,45 +93,50 @@ async def upload_qa_batch(
                     except UnicodeDecodeError:
                         continue
                 if df is None:
-                    raise HTTPException(status_code=400, detail="CSV文件编码无法识别，请使用UTF-8编码")
+                    errors.append("CSV: 编码无法识别")
             else:
                 # 读取Excel文件 - 尝试多种引擎
-                df = None
-                errors = []
-
                 # 尝试 openpyxl 引擎 (用于 .xlsx)
                 try:
                     df = pd.read_excel(temp_path, engine='openpyxl')
                 except Exception as e1:
-                    errors.append(f"openpyxl: {str(e1)}")
+                    errors.append(f"openpyxl: {str(e1)[:50]}")
 
                 # 如果失败，尝试 xlrd 引擎 (用于 .xls)
                 if df is None:
                     try:
                         df = pd.read_excel(temp_path, engine='xlrd')
                     except Exception as e2:
-                        errors.append(f"xlrd: {str(e2)}")
+                        errors.append(f"xlrd: {str(e2)[:50]}")
 
                 # 如果都失败，尝试不指定引擎
                 if df is None:
                     try:
                         df = pd.read_excel(temp_path)
                     except Exception as e3:
-                        errors.append(f"default: {str(e3)}")
-
-                if df is None:
-                    raise HTTPException(status_code=400, detail=f"无法读取Excel文件，请确保文件格式正确。错误: {'; '.join(errors)}")
-
-        except HTTPException:
-            raise
+                        errors.append(f"default: {str(e3)[:50]}")
         except Exception as e:
-            error_msg = str(e)
-            if "File is not a zip file" in error_msg:
-                raise HTTPException(status_code=400, detail="Excel文件格式错误，请确保文件是有效的.xlsx格式，或尝试另存为新文件")
-            elif "No such file or directory" in error_msg:
-                raise HTTPException(status_code=400, detail="无法读取文件，请重试")
-            else:
-                raise HTTPException(status_code=400, detail=f"文件读取失败: {error_msg}")
+            errors.append(f"initial: {str(e)[:50]}")
+
+        # 如果Excel读取失败，尝试作为CSV读取（有些文件扩展名是xlsx但实际是CSV）
+        if df is None:
+            try:
+                encodings = ['utf-8', 'utf-8-sig', 'gbk', 'gb2312', 'latin1']
+                for encoding in encodings:
+                    try:
+                        df = pd.read_csv(temp_path, encoding=encoding)
+                        errors.append(f"(成功以CSV格式读取，编码: {encoding})")
+                        break
+                    except UnicodeDecodeError:
+                        continue
+            except Exception as e:
+                errors.append(f"csv_fallback: {str(e)[:50]}")
+
+        if df is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"无法读取文件。请确保文件是有效的Excel(.xlsx/.xls)或CSV格式。\n尝试的方法: {'; '.join(errors)}"
+            )
 
         if '问题' not in df.columns or '答案' not in df.columns:
             raise HTTPException(status_code=400, detail="Excel文件必须包含【问题】和【答案】两列")
