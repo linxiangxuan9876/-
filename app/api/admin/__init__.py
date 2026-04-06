@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional, List
 from datetime import datetime
 from pathlib import Path
@@ -143,17 +144,40 @@ async def review_qa(
     status: str,
     main_category: Optional[str] = Query(None, description="修改后的大类"),
     sub_category: Optional[str] = Query(None, description="修改后的小类"),
+    skip_duplicate_check: bool = Query(False, description="是否跳过查重检查"),
     current_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """审核Q&A，通过或拒绝，支持修改分类"""
+    """审核 Q&A，通过或拒绝，支持修改分类（带查重功能）"""
     qa_item = db.query(QA_Item).filter(QA_Item.id == qa_id).first()
 
     if not qa_item:
-        raise HTTPException(status_code=404, detail="Q&A不存在")
+        raise HTTPException(status_code=404, detail="Q&A 不存在")
 
     if status not in ["published", "rejected"]:
         raise HTTPException(status_code=400, detail="状态必须是 published 或 rejected")
+
+    # 如果是通过且需要查重检查
+    if status == "published" and not skip_duplicate_check:
+        from app.services.qa_deduplication import QADeduplicationService
+        
+        is_duplicate, similar_qas = QADeduplicationService.check_duplicate_question(
+            question=qa_item.question,
+            answer=qa_item.answer,
+            db=db,
+            exclude_id=qa_id
+        )
+        
+        if is_duplicate:
+            # 返回 409 Conflict，并返回相似的 QA
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "duplicate_detected",
+                    "message": f"检测到 {len(similar_qas)} 条相似的 Q&A",
+                    "similar_items": similar_qas[:5]  # 只返回前 5 个最相似的
+                }
+            )
 
     qa_item.status = QAStatus.published if status == "published" else QAStatus.rejected
 
@@ -346,15 +370,21 @@ async def get_stats(
         # Q&A统计（排除已删除）
         total_qa = db.query(QA_Item).filter(QA_Item.is_deleted == False).count()
 
-        # 按状态统计Q&A数量（排除已删除）
-        qa_by_status = db.query(
-            QA_Item.status,
-            db.func.count(QA_Item.id).label('count')
-        ).filter(QA_Item.is_deleted == False).group_by(QA_Item.status).all()
-
-        # 调试：打印原始查询结果
-        print(f"[DEBUG] qa_by_status raw: {qa_by_status}")
-        print(f"[DEBUG] total_qa: {total_qa}")
+        # 分别统计各状态数量
+        published_count = db.query(QA_Item).filter(
+            QA_Item.status == QAStatus.published, 
+            QA_Item.is_deleted == False
+        ).count()
+        
+        pending_count = db.query(QA_Item).filter(
+            QA_Item.status == QAStatus.pending_review, 
+            QA_Item.is_deleted == False
+        ).count()
+        
+        rejected_count = db.query(QA_Item).filter(
+            QA_Item.status == QAStatus.rejected, 
+            QA_Item.is_deleted == False
+        ).count()
 
         # 回收站数量
         recycle_bin_count = db.query(QA_Item).filter(QA_Item.is_deleted == True).count()
@@ -367,20 +397,13 @@ async def get_stats(
 
         docs_by_store = db.query(
             Document.store_id,
-            db.func.count(Document.id).label('count')
+            func.count(Document.id).label('count')
         ).group_by(Document.store_id).all()
 
         qa_by_category = db.query(
             QA_Item.main_category,
-            db.func.count(QA_Item.id).label('count')
+            func.count(QA_Item.id).label('count')
         ).filter(QA_Item.status == QAStatus.published, QA_Item.is_deleted == False).group_by(QA_Item.main_category).all()
-
-        # 构建状态统计字典
-        status_counts = {}
-        for item in qa_by_status:
-            status_key = str(item.status.value) if hasattr(item.status, 'value') else str(item.status)
-            status_counts[status_key] = item.count
-            print(f"[DEBUG] status: {status_key} = {item.count}")
 
         result = {
             "total_documents": total_docs,
@@ -388,26 +411,28 @@ async def get_stats(
             "doc_parsed_count": doc_parsed,
             "total_qa_items": total_qa,
             "recycle_bin_count": recycle_bin_count,
-            "qa_by_status": status_counts,
-            "published_count": status_counts.get('published', 0),
-            "pending_count": status_counts.get('pending_review', 0),
-            "rejected_count": status_counts.get('rejected', 0),
+            "qa_by_status": {
+                "published": published_count,
+                "pending_review": pending_count,
+                "rejected": rejected_count
+            },
+            "published_count": published_count,
+            "pending_count": pending_count,
+            "rejected_count": rejected_count,
             "documents_by_store": {item.store_id: item.count for item in docs_by_store},
             "qa_by_category": {item.main_category: item.count for item in qa_by_category},
-            # 文档Q&A统计
             "total_doc_qas": total_doc_qas,
             "doc_qa_pending": doc_qa_pending,
             "doc_qa_approved": doc_qa_approved,
             "doc_qa_merged": doc_qa_merged
         }
 
-        print(f"[DEBUG] result: {result}")
+        print(f"[Stats] 返回数据: {result}")
         return result
     except Exception as e:
         import traceback
         print(f"Stats API Error: {e}")
         print(traceback.format_exc())
-        # 返回默认值
         return {
             "total_documents": 0,
             "doc_parsing_count": 0,
@@ -642,16 +667,37 @@ async def review_document_qa(
     status: str,  # approved 或 rejected
     main_category: Optional[str] = Query(None, description="修改后的大类"),
     sub_category: Optional[str] = Query(None, description="修改后的小类"),
+    skip_duplicate_check: bool = Query(False, description="是否跳过查重检查"),
     current_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """审核文档提取的Q&A"""
+    """审核文档提取的 Q&A（带查重功能）"""
     if status not in ["approved", "rejected"]:
         raise HTTPException(status_code=400, detail="状态必须是 approved 或 rejected")
 
     qa = db.query(DocumentQA).filter(DocumentQA.id == qa_id).first()
     if not qa:
-        raise HTTPException(status_code=404, detail="Q&A不存在")
+        raise HTTPException(status_code=404, detail="Q&A 不存在")
+
+    # 如果是通过且需要查重检查
+    if status == "approved" and not skip_duplicate_check:
+        from app.services.qa_deduplication import QADeduplicationService
+        
+        is_duplicate, similar_qas = QADeduplicationService.check_duplicate_for_document_qa(
+            question=qa.question,
+            answer=qa.answer,
+            db=db
+        )
+        
+        if is_duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "duplicate_detected",
+                    "message": f"检测到 {len(similar_qas)} 条相似的 Q&A",
+                    "similar_items": similar_qas[:5]
+                }
+            )
 
     qa.status = DocStatus.approved if status == "approved" else DocStatus.rejected
 

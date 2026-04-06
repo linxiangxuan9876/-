@@ -389,6 +389,27 @@
         </div>
     </div>
 
+    <!-- 重复警告模态框 -->
+    <div id="duplicateModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3>⚠️ 检测到重复内容</h3>
+            </div>
+            <div style="margin: 20px 0;">
+                <p style="color: #f39c12; font-weight: bold; margin-bottom: 15px;">
+                    发现以下相似的 Q&A，请确认是否仍要通过：
+                </p>
+                <div id="duplicateList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- 动态填充 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="secondary" onclick="closeDuplicateModal()">取消</button>
+                <button class="danger" onclick="confirmDuplicateOverride()">确认仍要通过</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = '/api';
         let token = localStorage.getItem('token');
@@ -396,6 +417,8 @@
         let knowledgePage = 0;
         let recyclePage = 0;
         let selectedIds = new Set();
+        let currentDuplicateData = null;  // 存储当前重复检测的数据
+        let currentReviewAction = null;  // 存储当前的审核操作
 
         if (!token) {
             window.location.href = '/login';
@@ -858,7 +881,7 @@
 
         async function singleReview(qaId, status) {
             const action = status === 'published' ? '通过' : '拒绝';
-            if (!confirm(`确定要${action}这条Q&A吗？`)) return;
+            if (!confirm(`确定要${action}这条 Q&A 吗？`)) return;
 
             try {
                 const response = await fetch(`${API_BASE}/admin/review_qa/${qaId}?status=${status}`, {
@@ -870,6 +893,15 @@
                     alert(`${action}成功！`);
                     loadReviewData();
                     loadStats();
+                } else if (response.status === 409) {
+                    // 检测到重复
+                    const error = await response.json();
+                    if (error.detail && error.detail.error === 'duplicate_detected') {
+                        currentReviewAction = { qaId, status };
+                        showDuplicateWarning(error.detail);
+                    } else {
+                        alert('操作失败');
+                    }
                 } else {
                     alert('操作失败');
                 }
@@ -1404,6 +1436,74 @@
                 } else {
                     const error = await response.json();
                     alert('清洗失败: ' + (error.detail || '未知错误'));
+                }
+            } catch (err) {
+                alert('网络错误');
+            }
+        }
+
+        // 显示重复警告
+        function showDuplicateWarning(detail) {
+            currentDuplicateData = detail;
+            const listDiv = document.getElementById('duplicateList');
+            
+            let html = '<div style="margin-bottom: 15px;"><strong>检测到相似内容：</strong></div>';
+            detail.similar_items.forEach((item, index) => {
+                html += `
+                    <div style="background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 5px; padding: 15px; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #667eea; font-weight: bold;">相似问题 #${index + 1}</span>
+                            <span style="background: #ff6b6b; color: white; padding: 2px 10px; border-radius: 10px; font-size: 12px;">
+                                相似度：${item.similarity}%
+                            </span>
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>问题：</strong>${item.question}
+                        </div>
+                        <div style="margin-bottom: 8px; color: #666;">
+                            <strong>答案：</strong>${item.answer.substring(0, 100)}${item.answer.length > 100 ? '...' : ''}
+                        </div>
+                        <div style="color: #999; font-size: 12px;">
+                            分类：${item.category}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            listDiv.innerHTML = html;
+            document.getElementById('duplicateModal').style.display = 'block';
+        }
+
+        // 关闭重复警告模态框
+        function closeDuplicateModal() {
+            document.getElementById('duplicateModal').style.display = 'none';
+            currentDuplicateData = null;
+            currentReviewAction = null;
+        }
+
+        // 确认忽略重复并继续
+        function confirmDuplicateOverride() {
+            if (!currentReviewAction) return;
+            
+            // 执行原审核操作，但跳过查重检查
+            executeReviewWithSkipDuplicate(currentReviewAction.qaId, currentReviewAction.status);
+            closeDuplicateModal();
+        }
+
+        // 执行审核（跳过查重）
+        async function executeReviewWithSkipDuplicate(qaId, status) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/review_qa/${qaId}?status=${status}&skip_duplicate_check=true`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    alert('已通过（忽略重复检测）！');
+                    loadReviewData();
+                    loadStats();
+                } else {
+                    alert('操作失败');
                 }
             } catch (err) {
                 alert('网络错误');

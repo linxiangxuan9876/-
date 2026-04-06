@@ -373,5 +373,17 @@ async def get_my_docs(
 
     return {
         "total": len(docs),
-        "documents": docs
+        "documents": [
+            {
+                "id": doc.id,
+                "filename": doc.filename,
+                "original_filename": doc.original_filename,
+                "file_size": doc.file_size,
+                "car_model": doc.car_model,
+                "category": doc.category,
+                "status": doc.status.value,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None
+            }
+            for doc in docs
+        ]
     }
