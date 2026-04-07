@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.database import engine, Base, SessionLocal
 from app.core.security import get_password_hash
-from app.models import User, UserRole, Document, QA_Item
+from app.models import User, UserRole, Document, QA_Item, DocumentQA
 
 def init_db():
     print("正在初始化数据库...")
