@@ -74,6 +74,14 @@ async def upload_qa_batch(
         os.makedirs(settings.QA_UPLOAD_DIR, exist_ok=True)
 
         content = await file.read()
+
+        # 检查文件大小
+        if len(content) > settings.MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件大小超过限制。当前限制: {settings.MAX_FILE_SIZE // (1024*1024)}MB"
+            )
+
         with open(temp_path, "wb") as f:
             f.write(content)
 
@@ -229,18 +237,27 @@ async def upload_document(
     file_ext = os.path.splitext(file.filename)[1].lower()
 
     # 检查文件格式
-    supported_exts = DocumentParser.SUPPORTED_EXTENSIONS | {'.xlsx', '.xls'}
-    if file_ext not in supported_exts:
+    allowed_exts = set(settings.ALLOWED_FILE_EXTENSIONS.split(","))
+    if file_ext not in allowed_exts:
         raise HTTPException(
             status_code=400,
-            detail=f"不支持的文件格式: {file_ext}。支持的格式: {', '.join(supported_exts)}"
+            detail=f"不支持的文件格式: {file_ext}。支持的格式: {settings.ALLOWED_FILE_EXTENSIONS}"
+        )
+
+    # 读取文件内容
+    content = await file.read()
+
+    # 检查文件大小
+    if len(content) > settings.MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件大小超过限制。当前限制: {settings.MAX_FILE_SIZE // (1024*1024)}MB"
         )
 
     unique_filename = f"{uuid.uuid4().hex}{file_ext}"
     file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
 
     try:
-        content = await file.read()
         with open(file_path, "wb") as f:
             f.write(content)
 

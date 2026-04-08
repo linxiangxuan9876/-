@@ -40,8 +40,14 @@ env/
 # Uploads
 uploads/
 
+# Environment variables - 敏感配置不要提交
+.env
+.env.local
+.env.production
+
 # Logs
 *.log
+logs/
 
 # OS
 .DS_Store

@@ -1,15 +1,34 @@
-from fastapi import FastAPI, Request
+from pathlib import Path
+from dotenv import load_dotenv
+
+# 加载 .env 文件（如果存在）
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
 import os
+import traceback
+import logging
 
 from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
 from app.core.security import get_password_hash
 from app.models import User, UserRole
 from app.api import store_router, admin_router, auth_router
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 def init_default_users():
     """初始化默认用户账号"""
@@ -68,13 +87,41 @@ static_path = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_path):
     app.mount("/static", StaticFiles(directory=static_path), name="static")
 
+# 解析 CORS_ORIGINS 环境变量
+cors_origins = settings.CORS_ORIGINS.split(",") if settings.CORS_ORIGINS != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# 全局异常处理器
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    logger.warning(f"HTTP异常: {exc.status_code} - {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning(f"验证错误: {exc.errors()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "请求参数验证失败", "errors": exc.errors()}
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.error(f"未处理异常: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "服务器内部错误，请稍后重试"}
+    )
 
 app.include_router(auth_router, prefix=settings.API_PREFIX)
 app.include_router(store_router, prefix=settings.API_PREFIX)
