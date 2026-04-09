@@ -167,7 +167,8 @@ project/
 │   │   ├── __init__.py
 │   │   ├── config.py       # 配置管理
 │   │   ├── database.py     # 数据库连接
-│   │   └── security.py     # 安全认证
+│   │   ├── security.py     # 安全认证
+│   │   └── logging_config.py # 日志配置
 │   ├── models/             # 数据模型
 │   │   ├── __init__.py
 │   │   ├── user.py
@@ -186,12 +187,23 @@ project/
 │   │   ├── llm_service.py        # LLM 调用服务
 │   │   └── kb_categories.py      # 知识库分类体系
 │   └── templates/           # 前端模板
+├── config/                  # 项目配置
+│   ├── .env.example         # 环境变量模板
+│   ├── .gitignore           # Git 忽略配置
+│   ├── requirements.txt     # 依赖清单
+│   ├── render.yaml          # Render 部署配置
+│   ├── run.py               # 生产环境启动
+│   ├── run_local.py         # 本地开发启动
+│   ├── run_simple.py        # 简化启动
+│   └── start_local.bat      # Windows 启动
+├── scripts/                 # 工具脚本
+│   ├── db/                  # 数据库脚本
+│   ├── deploy/              # 部署脚本
+│   └── dev/                 # 开发脚本
 ├── tests/                   # 测试用例
-├── docs/                    # 文档
+├── instruction_docs/        # 项目文档
 ├── uploads/                 # 上传文件
-├── requirements.txt
-├── run.py
-└── .env
+└── knowledge_base.db        # SQLite 数据库
 ```
 
 ### 3.3 API 设计规范

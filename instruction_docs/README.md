@@ -43,29 +43,43 @@
 ### 目录结构
 
 ```
-├── app/
-│   ├── api/              # API 路由
-│   │   ├── admin/        # 管理员接口
-│   │   ├── store/        # 门店接口
-│   │   └── auth.py        # 认证接口
-│   ├── core/
-│   │   ├── config.py     # 配置管理
-│   │   ├── database.py   # 数据库连接
-│   │   └── security.py   # 安全认证
-│   ├── models/           # 数据模型
-│   ├── schemas/          # Pydantic 模型
-│   ├── services/         # 业务逻辑
-│   │   ├── auto_classify.py     # AI 自动分类（关键词匹配 + LLM）
-│   │   ├── document_parser.py   # 文档解析
-│   │   ├── qa_deduplication.py  # Q&A 查重
-│   │   ├── llm_service.py      # LLM 调用服务
-│   │   └── kb_categories.py    # 知识库分类体系
-│   ├── templates/        # 前端页面
-│   └── main.py           # 应用入口
-├── uploads/              # 文件上传目录
-├── knowledge_base.db     # SQLite 数据库
-├── requirements.txt      # 依赖清单
-└── run.py               # 启动脚本
+├── app/                          # 应用代码
+│   ├── api/                      # API 路由
+│   │   ├── admin/                # 管理员接口
+│   │   ├── store/                # 门店接口
+│   │   └── auth.py               # 认证接口
+│   ├── core/                     # 核心配置
+│   │   ├── config.py             # 配置管理
+│   │   ├── database.py           # 数据库连接
+│   │   ├── security.py           # 安全认证
+│   │   └── logging_config.py     # 日志配置
+│   ├── models/                   # 数据模型
+│   ├── schemas/                  # Pydantic 模型
+│   ├── services/                 # 业务逻辑
+│   │   ├── auto_classify.py      # AI 自动分类（关键词匹配 + LLM）
+│   │   ├── document_parser.py    # 文档解析
+│   │   ├── qa_deduplication.py   # Q&A 查重
+│   │   ├── llm_service.py        # LLM 调用服务
+│   │   └── kb_categories.py      # 知识库分类体系
+│   ├── templates/                # 前端页面
+│   └── main.py                   # 应用入口
+├── config/                       # 项目配置和启动脚本
+│   ├── .env.example              # 环境变量模板
+│   ├── .gitignore                # Git 忽略配置
+│   ├── requirements.txt          # 依赖清单
+│   ├── render.yaml               # Render 部署配置
+│   ├── run.py                    # 生产环境启动脚本
+│   ├── run_local.py              # 本地开发启动脚本
+│   ├── run_simple.py             # 简化启动脚本
+│   └── start_local.bat           # Windows 本地启动批处理
+├── instruction_docs/             # 项目文档
+├── scripts/                      # 工具脚本
+│   ├── db/                       # 数据库脚本
+│   ├── deploy/                   # 部署脚本
+│   └── dev/                      # 开发脚本
+├── tests/                        # 测试脚本
+├── uploads/                      # 文件上传目录
+└── knowledge_base.db             # SQLite 数据库
 ```
 
 ---
@@ -89,14 +103,14 @@ python -m venv venv
 source venv/bin/activate  # Linux/Mac
 
 # 3. 安装依赖
-pip install -r requirements.txt
+pip install -r config/requirements.txt
 
 # 4. 配置环境变量
-cp .env.example .env
+cp config/.env.example .env
 # 编辑 .env 填入实际值
 
 # 5. 启动服务
-python run.py
+python config/run.py
 ```
 
 ### 默认账号
