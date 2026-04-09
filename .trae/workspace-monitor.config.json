@@ -1,0 +1,45 @@
+{
+  "version": "1.0.0",
+  "snapshot": {
+    "storage_path": ".trae/workspace-snapshots/",
+    "hash_algorithm": "md5",
+    "include_binary": false,
+    "max_file_size_mb": 10
+  },
+  "change_detection": {
+    "git_integration": true,
+    "content_hash_check": true,
+    "metadata_check": true
+  },
+  "logging": {
+    "storage_path": ".trae/workspace-logs/",
+    "format": "markdown",
+    "auto_archive": true,
+    "archive_threshold_mb": 10,
+    "archive_after_days": 30,
+    "archive_path": ".trae/workspace-logs/archive/"
+  },
+  "ignore": {
+    "patterns": [
+      "node_modules/",
+      "dist/",
+      "build/",
+      ".git/",
+      "*.log",
+      "*.tmp",
+      ".DS_Store",
+      "Thumbs.db",
+      "__pycache__/",
+      "*.pyc",
+      "*.pyo",
+      "lib/",
+      "*.db"
+    ],
+    "use_gitignore": true
+  },
+  "performance": {
+    "parallel_processing": true,
+    "max_workers": 4,
+    "batch_size": 100
+  }
+}
